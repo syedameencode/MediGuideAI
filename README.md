@@ -240,7 +240,7 @@ MediGuide AI is architected into cohesive, decoupled modules spanning the presen
 
 ## 7. Application Output & UI Showcase (`output/`)
 
-All system execution output and workflow screens are saved in the [`output/`](output/) folder (and mirrored in [`ouput/`](ouput/)):
+All system execution output and workflow screens are saved in the [`output/`](output/) folder:
 
 | Screen # | Module / Workflow Screen | Description |
 |---|---|---|
@@ -343,7 +343,6 @@ MediGuideAI/
 │   ├── 05_differential_diagnosis_and_feedback.jpg
 │   ├── 06_patient_health_profile.jpg
 │   └── 07_longitudinal_risk_trends.png
-├── ouput/                          # Output alias directory
 ├── ml_datasets/                    # Educational ARFF datasets (Weka)
 │   ├── diabetes_risk.arff
 │   ├── heart_disease_risk.arff
