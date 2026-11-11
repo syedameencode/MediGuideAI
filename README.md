@@ -19,12 +19,13 @@
 4. [Database Design & Schema (`Database.sql`)](#4-database-design--schema-databasesql)
 5. [Required libraries and dependencies.](#5-required-libraries-and-dependencies)
 6. [All implemented modules and functionalities](#6-all-implemented-modules-and-functionalities)
-7. [Prerequisites](#7-prerequisites)
-8. [Installation & Execution Guide](#8-installation--execution-guide)
-9. [Demo Credentials](#9-demo-credentials)
-10. [Repository Structure](#10-repository-structure)
-11. [Automated Testing Suite](#11-automated-testing-suite)
-12. [Clinical Disclaimer & License](#12-clinical-disclaimer--license)
+7. [Application Output & UI Showcase (`output/`)](#7-application-output--ui-showcase-output)
+8. [Prerequisites](#8-prerequisites)
+9. [Installation & Execution Guide](#9-installation--execution-guide)
+10. [Demo Credentials](#10-demo-credentials)
+11. [Repository Structure](#11-repository-structure)
+12. [Automated Testing Suite](#12-automated-testing-suite)
+13. [Clinical Disclaimer & License](#13-clinical-disclaimer--license)
 
 ---
 
@@ -237,7 +238,33 @@ MediGuide AI is architected into cohesive, decoupled modules spanning the presen
 
 ---
 
-## 7. Prerequisites
+## 7. Application Output & UI Showcase (`output/`)
+
+All system execution output and workflow screens are saved in the [`output/`](output/) folder (and mirrored in [`ouput/`](ouput/)):
+
+| Screen # | Module / Workflow Screen | Description |
+|---|---|---|
+| **01** | **Authentication Portal** | Role-based authentication supporting Administrator and Doctor logins with quick-fill demo presets. |
+| **02** | **Clinical Health Command Dashboard** | Real-time population risk index, biomarker telemetry, multi-condition profiles, and audit log. |
+| **03** | **Patient Diagnostic Intake** | Quantitative vitals entry (BP, glucose, cholesterol, creatinine), automatic BMI computation, and clinical symptoms checklist. |
+| **04** | **Explainable AI (XAI) Decision Card** | Fused hybrid risk determination (Cardiovascular / Diabetes / CKD) with contributing biomarker evidence. |
+| **05** | **Differential Hypotheses & Clinician Feedback** | Secondary etiology considerations, guideline-directed protocols, and clinician override form. |
+| **06** | **Patient Health Profile & Telemetry** | Complete patient demographic profile, biomarker cards, and historical diagnosis breakdown. |
+| **07** | **Longitudinal Health & Risk Trajectories** | Interactive JavaFX risk progression chart and audit log of clinical vitals across time. |
+
+<p align="center">
+  <img src="output/02_clinical_dashboard.jpg" alt="MediGuide AI Clinical Dashboard" width="850"/>
+</p>
+<p align="center">
+  <img src="output/04_explainable_ai_decision_card.jpg" alt="Explainable AI Decision Card" width="850"/>
+</p>
+<p align="center">
+  <img src="output/07_longitudinal_risk_trends.png" alt="Longitudinal Health & Risk Trends" width="850"/>
+</p>
+
+---
+
+## 8. Prerequisites
 
 Before running the application, ensure your environment meets these requirements:
 - **Operating System**: Windows 10/11, macOS 12+, or Ubuntu 20.04+ LTS
@@ -247,7 +274,7 @@ Before running the application, ensure your environment meets these requirements
 
 ---
 
-## 8. Installation & Execution Guide
+## 9. Installation & Execution Guide
 
 ### Step 1: Clone the Repository
 ```bash
@@ -260,10 +287,14 @@ If using MySQL, import [`Database.sql`](Database.sql):
 ```bash
 mysql -u root -p < Database.sql
 ```
-*(If using SQLite, skip this step &mdash; the database initializes automatically).*
+*(If using SQLite, skip this step — the database initializes automatically).*
 
 ### Step 3: Run the Application
-Using the Maven wrapper:
+Using the 1-click Windows batch script:
+```powershell
+.\run.bat
+```
+Or using the Maven wrapper:
 
 **Windows (PowerShell):**
 ```powershell
@@ -282,7 +313,7 @@ Using the Maven wrapper:
 
 ---
 
-## 9. Demo Credentials
+## 10. Demo Credentials
 
 Quick-fill buttons are provided on the login view:
 
@@ -293,16 +324,26 @@ Quick-fill buttons are provided on the login view:
 
 ---
 
-## 10. Repository Structure
+## 11. Repository Structure
 
 ```text
 MediGuideAI/
 ├── Database.sql                    # MySQL schema & pre-seeded clinical cohort datasets
 ├── README.md                       # Comprehensive system documentation
 ├── LICENSE                         # MIT open-source license
+├── run.bat                         # 1-Click Windows execution script
 ├── pom.xml                         # Maven dependencies & build configurations
 ├── mvnw / mvnw.cmd                 # Maven wrapper scripts
 ├── mediguide.db                    # Embedded SQLite database fallback
+├── output/                         # Application output screenshots & UI workflow
+│   ├── 01_login_screen.png
+│   ├── 02_clinical_dashboard.jpg
+│   ├── 03_patient_diagnostic_intake.png
+│   ├── 04_explainable_ai_decision_card.jpg
+│   ├── 05_differential_diagnosis_and_feedback.jpg
+│   ├── 06_patient_health_profile.jpg
+│   └── 07_longitudinal_risk_trends.png
+├── ouput/                          # Output alias directory
 ├── ml_datasets/                    # Educational ARFF datasets (Weka)
 │   ├── diabetes_risk.arff
 │   ├── heart_disease_risk.arff
@@ -329,7 +370,7 @@ MediGuideAI/
 
 ---
 
-## 11. Automated Testing Suite
+## 12. Automated Testing Suite
 
 The project includes an automated JUnit 5 test suite verifying system correctness:
 - `WekaMLServiceTest`: Validates ARFF dataset generation, model training, cross-validation metrics, and probability predictions.
@@ -340,7 +381,7 @@ The project includes an automated JUnit 5 test suite verifying system correctnes
 
 ---
 
-## 12. Clinical Disclaimer & License
+## 13. Clinical Disclaimer & License
 
 ### Clinical Disclaimer
 **IMPORTANT NOTICE**: MediGuide AI is designed solely for educational, academic, and clinical research demonstration purposes. It does not constitute certified medical diagnostic equipment or licensed medical advice. All algorithmic outputs and recommendations must be reviewed and validated by a licensed physician or certified medical authority before administering patient care or prescribing treatment.
