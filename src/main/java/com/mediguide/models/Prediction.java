@@ -6,9 +6,16 @@ public class Prediction {
     private String conditionName;
     private String riskLevel;          // "Low", "Medium", "High"
     private double confidence;         // Percentage (e.g. 84.5)
-    private String contributingFactors; // JSON or newline-separated explanation factors
+    private String contributingFactors; // Semicolon-separated explanation factors
     private String alternativeConditions;
     private String predictionDate;
+
+    // Hybrid Fusion tracking
+    private String mlPrediction = "";
+    private double mlConfidence = 0;
+    private String rulePrediction = "";
+    private int ruleScore = 0;
+    private String fusionMethod = "Rule-Based Only";
 
     public Prediction() {}
 
@@ -100,4 +107,20 @@ public class Prediction {
     public void setPredictionDate(String predictionDate) {
         this.predictionDate = predictionDate;
     }
+
+    // Hybrid Fusion Accessors
+    public String getMlPrediction() { return mlPrediction; }
+    public void setMlPrediction(String mlPrediction) { this.mlPrediction = mlPrediction != null ? mlPrediction : ""; }
+
+    public double getMlConfidence() { return mlConfidence; }
+    public void setMlConfidence(double mlConfidence) { this.mlConfidence = mlConfidence; }
+
+    public String getRulePrediction() { return rulePrediction; }
+    public void setRulePrediction(String rulePrediction) { this.rulePrediction = rulePrediction != null ? rulePrediction : ""; }
+
+    public int getRuleScore() { return ruleScore; }
+    public void setRuleScore(int ruleScore) { this.ruleScore = ruleScore; }
+
+    public String getFusionMethod() { return fusionMethod; }
+    public void setFusionMethod(String fusionMethod) { this.fusionMethod = fusionMethod != null ? fusionMethod : ""; }
 }

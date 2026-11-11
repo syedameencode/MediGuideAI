@@ -50,6 +50,20 @@
             <version>8.3.0</version>
         </dependency>
 
+        <!-- Weka Machine Learning Library -->
+        <dependency>
+            <groupId>nz.ac.waikato.cms.weka</groupId>
+            <artifactId>weka-stable</artifactId>
+            <version>3.8.6</version>
+        </dependency>
+
+        <!-- iTextPDF for Report Generation -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itextpdf</artifactId>
+            <version>5.5.13.3</version>
+        </dependency>
+
         <!-- JUnit 5 Testing Framework -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -73,8 +87,12 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <release>21</release>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Xlint:-this-escape</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
 

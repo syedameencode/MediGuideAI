@@ -19,6 +19,11 @@ public class MainApp extends Application {
         // Initialize database and tables
         DatabaseManager.getInstance();
 
+        // Initialize Weka ML Pipeline on background thread so JavaFX UI opens instantly
+        new Thread(() -> {
+            com.mediguide.ml.WekaMLService.getInstance().initialize();
+        }, "Weka-Init-Thread").start();
+
         primaryStage.setTitle("MediGuide AI — Intelligent Healthcare Diagnosis & Explainable Decision Support");
         primaryStage.setMinWidth(1080);
         primaryStage.setMinHeight(700);
@@ -39,6 +44,7 @@ public class MainApp extends Application {
             scene.getStylesheets().add(css);
         }
 
+        com.mediguide.util.ThemeManager.registerScene(scene);
         primaryStage.setScene(scene);
         primaryStage.centerOnScreen();
     }
@@ -54,6 +60,7 @@ public class MainApp extends Application {
             scene.getStylesheets().add(css);
         }
 
+        com.mediguide.util.ThemeManager.registerScene(scene);
         primaryStage.setScene(scene);
         primaryStage.centerOnScreen();
     }

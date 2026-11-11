@@ -3,6 +3,7 @@ package com.mediguide.ui;
 import com.mediguide.dao.PatientDAO;
 import com.mediguide.models.Patient;
 import com.mediguide.models.User;
+import com.mediguide.util.UIAnimationHelper;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -87,8 +88,11 @@ public class PatientManagementView extends VBox {
 
         getChildren().addAll(headerRow, searchToolbar, tableView);
         refreshData();
+
+        UIAnimationHelper.slideInUp(this);
     }
 
+    @SuppressWarnings("unchecked")
     private TableView<Patient> createPatientTable() {
         TableView<Patient> table = new TableView<>();
         patientList = FXCollections.observableArrayList();
@@ -98,36 +102,36 @@ public class PatientManagementView extends VBox {
         idCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().getPatientId()));
         idCol.setPrefWidth(60);
 
-        TableColumn<Patient, String> nameCol = new TableColumn<>("Patient Name");
+        TableColumn<Patient, String> nameCol = new TableColumn<>("PATIENT NAME");
         nameCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getName()));
         nameCol.setPrefWidth(180);
 
-        TableColumn<Patient, Number> ageCol = new TableColumn<>("Age");
+        TableColumn<Patient, Number> ageCol = new TableColumn<>("AGE");
         ageCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().getAge()));
         ageCol.setPrefWidth(60);
 
-        TableColumn<Patient, String> genderCol = new TableColumn<>("Gender");
+        TableColumn<Patient, String> genderCol = new TableColumn<>("GENDER");
         genderCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getGender()));
         genderCol.setPrefWidth(80);
 
-        TableColumn<Patient, String> phoneCol = new TableColumn<>("Phone Number");
+        TableColumn<Patient, String> phoneCol = new TableColumn<>("PHONE");
         phoneCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getPhone()));
         phoneCol.setPrefWidth(140);
 
-        TableColumn<Patient, String> emailCol = new TableColumn<>("Email Address");
+        TableColumn<Patient, String> emailCol = new TableColumn<>("EMAIL");
         emailCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getEmail()));
         emailCol.setPrefWidth(180);
 
-        TableColumn<Patient, String> dateCol = new TableColumn<>("Registered Date");
+        TableColumn<Patient, String> dateCol = new TableColumn<>("REGISTERED");
         dateCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getCreatedDate()));
         dateCol.setPrefWidth(130);
 
         // Actions Column
-        TableColumn<Patient, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(240);
+        TableColumn<Patient, Void> actionCol = new TableColumn<>("ACTIONS");
+        actionCol.setPrefWidth(280);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button diagnoseBtn = new Button("⚡ Diagnose");
-            private final Button historyBtn = new Button("History");
+            private final Button diagnoseBtn = new Button("⚡ Analyze");
+            private final Button historyBtn = new Button("Patient Screen");
             private final Button editBtn = new Button("Edit");
             private final Button deleteBtn = new Button("Delete");
             private final HBox pane = new HBox(6, diagnoseBtn, historyBtn, editBtn, deleteBtn);
@@ -135,28 +139,28 @@ public class PatientManagementView extends VBox {
             {
                 pane.setAlignment(Pos.CENTER_LEFT);
                 diagnoseBtn.getStyleClass().add("btn-primary");
-                diagnoseBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 8;");
+                diagnoseBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 10; -fx-background-radius: 12;");
                 diagnoseBtn.setOnAction(e -> {
                     Patient p = getTableView().getItems().get(getIndex());
                     if (onDiagnosePatient != null) onDiagnosePatient.accept(p);
                 });
 
                 historyBtn.getStyleClass().add("btn-secondary");
-                historyBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 8;");
+                historyBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 10; -fx-background-radius: 12;");
                 historyBtn.setOnAction(e -> {
                     Patient p = getTableView().getItems().get(getIndex());
                     if (onViewHistory != null) onViewHistory.accept(p);
                 });
 
                 editBtn.getStyleClass().add("btn-secondary");
-                editBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 8;");
+                editBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 8; -fx-background-radius: 12;");
                 editBtn.setOnAction(e -> {
                     Patient p = getTableView().getItems().get(getIndex());
                     showEditPatientDialog(p);
                 });
 
                 deleteBtn.getStyleClass().add("btn-danger");
-                deleteBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 8;");
+                deleteBtn.setStyle("-fx-font-size: 11px; -fx-padding: 4 8; -fx-background-radius: 12;");
                 deleteBtn.setOnAction(e -> {
                     Patient p = getTableView().getItems().get(getIndex());
                     handleDeletePatient(p);
@@ -175,7 +179,7 @@ public class PatientManagementView extends VBox {
         });
 
         table.getColumns().addAll(idCol, nameCol, ageCol, genderCol, phoneCol, emailCol, dateCol, actionCol);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
         return table;
     }
 
@@ -210,7 +214,19 @@ public class PatientManagementView extends VBox {
         ComboBox<String> genderBox = new ComboBox<>(FXCollections.observableArrayList("Female", "Male", "Other"));
         genderBox.setValue("Female");
         TextField phoneField = new TextField();
-        phoneField.setPromptText("+1 (555) 000-0000");
+        phoneField.setPromptText("10-digit Mobile Number (e.g. 9876543210)");
+        phoneField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String digitsOnly = newVal.replaceAll("[^\\d]", "");
+                if (digitsOnly.length() > 10) {
+                    digitsOnly = digitsOnly.substring(0, 10);
+                }
+                if (!newVal.equals(digitsOnly)) {
+                    phoneField.setText(digitsOnly);
+                }
+            }
+        });
+
         TextField emailField = new TextField();
         emailField.setPromptText("patient@example.com");
         TextArea notesArea = new TextArea();
@@ -223,9 +239,9 @@ public class PatientManagementView extends VBox {
         grid.add(ageField, 1, 1);
         grid.add(new Label("Gender:*"), 0, 2);
         grid.add(genderBox, 1, 2);
-        grid.add(new Label("Phone:"), 0, 3);
+        grid.add(new Label("Phone (10 Digits):*"), 0, 3);
         grid.add(phoneField, 1, 3);
-        grid.add(new Label("Email:"), 0, 4);
+        grid.add(new Label("Email (.com):*"), 0, 4);
         grid.add(emailField, 1, 4);
         grid.add(new Label("Medical Notes:"), 0, 5);
         grid.add(notesArea, 1, 5);
@@ -242,13 +258,25 @@ public class PatientManagementView extends VBox {
                     String email = emailField.getText().trim();
                     String notes = notesArea.getText().trim();
 
-                    if (name.isEmpty()) return null;
+                    if (name.isEmpty()) {
+                        showErrorAlert("Validation Error", "Patient name cannot be empty.");
+                        return null;
+                    }
+                    if (phone.length() != 10) {
+                        showErrorAlert("Validation Error", "Mobile number must be exactly 10 digits.");
+                        return null;
+                    }
+                    if (!email.isEmpty() && (!email.toLowerCase().endsWith(".com") || !email.contains("@"))) {
+                        showErrorAlert("Validation Error", "Email address must contain '@' and end with .com");
+                        return null;
+                    }
 
                     DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
                     String now = LocalDateTime.now().format(dtf);
 
                     return new Patient(name, age, gender, phone, email, notes, now);
                 } catch (Exception ex) {
+                    showErrorAlert("Validation Error", "Please enter valid numeric age.");
                     return null;
                 }
             }
@@ -282,6 +310,18 @@ public class PatientManagementView extends VBox {
         ComboBox<String> genderBox = new ComboBox<>(FXCollections.observableArrayList("Female", "Male", "Other"));
         genderBox.setValue(patient.getGender());
         TextField phoneField = new TextField(patient.getPhone());
+        phoneField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String digitsOnly = newVal.replaceAll("[^\\d]", "");
+                if (digitsOnly.length() > 10) {
+                    digitsOnly = digitsOnly.substring(0, 10);
+                }
+                if (!newVal.equals(digitsOnly)) {
+                    phoneField.setText(digitsOnly);
+                }
+            }
+        });
+
         TextField emailField = new TextField(patient.getEmail());
         TextArea notesArea = new TextArea(patient.getMedicalHistoryNotes());
         notesArea.setPrefRowCount(3);
@@ -292,9 +332,9 @@ public class PatientManagementView extends VBox {
         grid.add(ageField, 1, 1);
         grid.add(new Label("Gender:*"), 0, 2);
         grid.add(genderBox, 1, 2);
-        grid.add(new Label("Phone:"), 0, 3);
+        grid.add(new Label("Phone (10 Digits):*"), 0, 3);
         grid.add(phoneField, 1, 3);
-        grid.add(new Label("Email:"), 0, 4);
+        grid.add(new Label("Email (.com):*"), 0, 4);
         grid.add(emailField, 1, 4);
         grid.add(new Label("Medical Notes:"), 0, 5);
         grid.add(notesArea, 1, 5);
@@ -304,14 +344,33 @@ public class PatientManagementView extends VBox {
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveBtnType) {
                 try {
-                    patient.setName(nameField.getText().trim());
-                    patient.setAge(Integer.parseInt(ageField.getText().trim()));
+                    String name = nameField.getText().trim();
+                    int age = Integer.parseInt(ageField.getText().trim());
+                    String phone = phoneField.getText().trim();
+                    String email = emailField.getText().trim();
+
+                    if (name.isEmpty()) {
+                        showErrorAlert("Validation Error", "Patient name cannot be empty.");
+                        return null;
+                    }
+                    if (phone.length() != 10) {
+                        showErrorAlert("Validation Error", "Mobile number must be exactly 10 digits.");
+                        return null;
+                    }
+                    if (!email.isEmpty() && (!email.toLowerCase().endsWith(".com") || !email.contains("@"))) {
+                        showErrorAlert("Validation Error", "Email address must contain '@' and end with .com");
+                        return null;
+                    }
+
+                    patient.setName(name);
+                    patient.setAge(age);
                     patient.setGender(genderBox.getValue());
-                    patient.setPhone(phoneField.getText().trim());
-                    patient.setEmail(emailField.getText().trim());
+                    patient.setPhone(phone);
+                    patient.setEmail(email);
                     patient.setMedicalHistoryNotes(notesArea.getText().trim());
                     return patient;
                 } catch (Exception ex) {
+                    showErrorAlert("Validation Error", "Please enter valid numeric age.");
                     return null;
                 }
             }
@@ -336,5 +395,13 @@ public class PatientManagementView extends VBox {
             patientDAO.delete(patient.getPatientId());
             refreshData();
         }
+    }
+
+    private void showErrorAlert(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(title);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 }

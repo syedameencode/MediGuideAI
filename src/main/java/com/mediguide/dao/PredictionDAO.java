@@ -5,7 +5,9 @@ import com.mediguide.models.Prediction;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -14,7 +16,10 @@ public class PredictionDAO {
     private final DatabaseManager dbManager = DatabaseManager.getInstance();
 
     public int create(Prediction p) {
-        String sql = "INSERT INTO predictions (patient_id, condition_name, risk_level, confidence, contributing_factors, alternative_conditions, prediction_date) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO predictions (patient_id, condition_name, risk_level, confidence, " +
+                "contributing_factors, alternative_conditions, ml_prediction, ml_confidence, " +
+                "rule_prediction, rule_score, fusion_method, prediction_date) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = dbManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, p.getPatientId());
@@ -23,7 +28,12 @@ public class PredictionDAO {
             ps.setDouble(4, p.getConfidence());
             ps.setString(5, p.getContributingFactors());
             ps.setString(6, p.getAlternativeConditions());
-            ps.setString(7, p.getPredictionDate());
+            ps.setString(7, p.getMlPrediction());
+            ps.setDouble(8, p.getMlConfidence());
+            ps.setString(9, p.getRulePrediction());
+            ps.setInt(10, p.getRuleScore());
+            ps.setString(11, p.getFusionMethod());
+            ps.setString(12, p.getPredictionDate());
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -88,18 +98,22 @@ public class PredictionDAO {
         return list;
     }
 
-    public int countHighRisk() {
-        String sql = "SELECT COUNT(*) FROM predictions WHERE LOWER(risk_level) = 'high'";
+    public int countByRiskLevel(String riskLevel) {
+        String sql = "SELECT COUNT(*) FROM predictions WHERE LOWER(risk_level) = ?";
         try (Connection conn = dbManager.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return rs.getInt(1);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, riskLevel.toLowerCase());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getInt(1);
             }
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Error counting high risk predictions", e);
+            LOGGER.log(Level.SEVERE, "Error counting " + riskLevel + " risk predictions", e);
         }
         return 0;
+    }
+
+    public int countHighRisk() {
+        return countByRiskLevel("high");
     }
 
     public int countTotal() {
@@ -116,8 +130,37 @@ public class PredictionDAO {
         return 0;
     }
 
+    /**
+     * Returns risk distribution as a map: {High=N, Medium=N, Low=N}
+     */
+    public Map<String, Integer> getRiskDistribution() {
+        Map<String, Integer> dist = new LinkedHashMap<>();
+        dist.put("High", countByRiskLevel("high"));
+        dist.put("Medium", countByRiskLevel("medium"));
+        dist.put("Low", countByRiskLevel("low"));
+        return dist;
+    }
+
+    /**
+     * Returns condition distribution: {Diabetes Mellitus=N, Cardiovascular Disease=N, ...}
+     */
+    public Map<String, Integer> getConditionDistribution() {
+        Map<String, Integer> dist = new LinkedHashMap<>();
+        String sql = "SELECT condition_name, COUNT(*) as cnt FROM predictions GROUP BY condition_name ORDER BY cnt DESC";
+        try (Connection conn = dbManager.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                dist.put(rs.getString("condition_name"), rs.getInt("cnt"));
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error getting condition distribution", e);
+        }
+        return dist;
+    }
+
     private Prediction mapPrediction(ResultSet rs) throws SQLException {
-        return new Prediction(
+        Prediction p = new Prediction(
                 rs.getInt("prediction_id"),
                 rs.getInt("patient_id"),
                 rs.getString("condition_name"),
@@ -127,5 +170,16 @@ public class PredictionDAO {
                 rs.getString("alternative_conditions"),
                 rs.getString("prediction_date")
         );
+        // Map new hybrid fusion columns (safe fallback for older rows)
+        try {
+            p.setMlPrediction(rs.getString("ml_prediction"));
+            p.setMlConfidence(rs.getDouble("ml_confidence"));
+            p.setRulePrediction(rs.getString("rule_prediction"));
+            p.setRuleScore(rs.getInt("rule_score"));
+            p.setFusionMethod(rs.getString("fusion_method"));
+        } catch (SQLException ignored) {
+            // Columns may not exist in older database — graceful fallback
+        }
+        return p;
     }
 }

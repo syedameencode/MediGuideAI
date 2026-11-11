@@ -7,32 +7,43 @@ import com.mediguide.models.Patient;
 import com.mediguide.models.Prediction;
 import com.mediguide.models.RiskAssessmentResult;
 import com.mediguide.models.User;
-import javafx.geometry.Insets;
+import com.mediguide.util.PdfReportGenerator;
+import com.mediguide.util.UIAnimationHelper;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.function.Consumer;
 
+/**
+ * ExplainableResultView — Explainable Decision Card Screen.
+ * Displays Overall Risk, ML Result, Rule Result, Hybrid Result,
+ * Contributing Factors, Alternative Possibilities, and Recommendations
+ * with strict backend-driven values and "Not Available" fallback.
+ */
 public class ExplainableResultView extends ScrollPane {
 
     private final Patient patient;
     private final RiskAssessmentResult result;
     private final User currentUser;
     private final Runnable onBackAction;
+    private final Consumer<String> onAnalyzeWithGemini;
 
     private final PredictionDAO predictionDAO = new PredictionDAO();
     private final DoctorFeedbackDAO feedbackDAO = new DoctorFeedbackDAO();
     private int savedPredictionId = -1;
+    private Label pdfStatusLabel;
 
-    public ExplainableResultView(Patient patient, RiskAssessmentResult result, User currentUser, Runnable onBackAction) {
+    public ExplainableResultView(Patient patient, RiskAssessmentResult result, User currentUser, Runnable onBackAction, Consumer<String> onAnalyzeWithGemini) {
         this.patient = patient;
         this.result = result;
         this.currentUser = currentUser;
         this.onBackAction = onBackAction;
+        this.onAnalyzeWithGemini = onAnalyzeWithGemini;
 
         savePredictionToDatabase();
         initUI();
@@ -42,18 +53,26 @@ public class ExplainableResultView extends ScrollPane {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         String now = LocalDateTime.now().format(dtf);
 
-        String factorsCombined = String.join("; ", result.getContributingFactors());
-        String alternativesCombined = String.join("; ", result.getAlternativePossibilities());
+        String factorsCombined = (result.getContributingFactors() != null && !result.getContributingFactors().isEmpty())
+                ? String.join("; ", result.getContributingFactors())
+                : "Not Available";
+
+        String alternativesCombined = (result.getAlternativePossibilities() != null && !result.getAlternativePossibilities().isEmpty())
+                ? String.join("; ", result.getAlternativePossibilities())
+                : "Not Available";
 
         Prediction p = new Prediction(
                 patient.getPatientId(),
-                result.getPrimaryCondition(),
-                result.getOverallRiskLevel(),
+                result.getPrimaryCondition() != null ? result.getPrimaryCondition() : "General Screening",
+                result.getOverallRiskLevel() != null ? result.getOverallRiskLevel() : "Unknown",
                 result.getConfidenceScore(),
                 factorsCombined,
                 alternativesCombined,
                 now
         );
+        p.setFusionMethod(result.getFusionStrategy() != null ? result.getFusionStrategy() : "Weighted Hybrid");
+        p.setMlPrediction(result.getMlPrediction() != null ? result.getMlPrediction() : "Not Available");
+        p.setRulePrediction(result.getRulePrediction() != null ? result.getRulePrediction() : "Not Available");
 
         savedPredictionId = predictionDAO.create(p);
     }
@@ -66,46 +85,23 @@ public class ExplainableResultView extends ScrollPane {
         contentBox.getStyleClass().add("content-area");
         contentBox.setMaxWidth(1100);
 
+        pdfStatusLabel = new Label();
+        pdfStatusLabel.setVisible(false);
+        pdfStatusLabel.setManaged(false);
+
         // Top Navigation Bar
-        HBox topBar = new HBox(16);
-        topBar.setAlignment(Pos.CENTER_LEFT);
+        HBox topBar = createTopBar();
 
-        Button backBtn = new Button("← Back to Clinical Entry");
-        backBtn.getStyleClass().add("btn-secondary");
-        backBtn.setOnAction(e -> {
-            if (onBackAction != null) onBackAction.run();
-        });
-
-        VBox titleBox = new VBox(2);
-        Label title = new Label("Intelligent Decision Support & Explainable AI Card");
-        title.getStyleClass().add("page-header-title");
-        Label subtitle = new Label("Multi-Condition Evaluation & Transparent Reasoning for Patient: " + patient.getName() + " (#" + patient.getPatientId() + ")");
-        subtitle.getStyleClass().add("page-header-subtitle");
-        titleBox.getChildren().addAll(title, subtitle);
-
-        topBar.getChildren().addAll(backBtn, titleBox);
-
-        // Disclaimer Banner
-        HBox disclaimerBanner = new HBox(12);
-        disclaimerBanner.getStyleClass().add("disclaimer-banner");
-        disclaimerBanner.setAlignment(Pos.CENTER_LEFT);
-        Label warnIcon = new Label("⚠");
-        warnIcon.setStyle("-fx-font-size: 16px; -fx-text-fill: #d97706;");
-        Label disclaimerText = new Label(result.getDisclaimer());
-        disclaimerText.getStyleClass().add("disclaimer-text");
-        disclaimerText.setWrapText(true);
-        disclaimerBanner.getChildren().addAll(warnIcon, disclaimerText);
-
-        // 1. Primary Diagnosis & Confidence Hero Card
+        // 1. Primary Diagnosis & Overall Risk Hero Card
         VBox heroCard = createPrimaryDiagnosisCard();
 
-        // 2. Multi-Condition Analysis Row (Review 1 Unique Feature: Page 13 in PDF)
-        VBox multiConditionSection = createMultiConditionSection();
+        // 2. Decision Engine Triad: ML Result | Rule Result | Hybrid Result
+        HBox engineTriad = createEngineTriadRow();
 
-        // 3. Explainable AI Factor Checklist ("Why did the system reach this conclusion?")
-        VBox xaiCard = createExplainabilityCard();
+        // 3. Contributing Evidence Checklist
+        VBox factorsCard = createContributingFactorsCard();
 
-        // 4. Clinical Recommendations & Differential Hypotheses
+        // 4. Clinical Recommendations & Differential Possibilities (Dual Column)
         HBox dualClinicalBox = new HBox(20);
         VBox altCard = createAlternativesCard();
         VBox recCard = createRecommendationsCard();
@@ -113,234 +109,429 @@ public class ExplainableResultView extends ScrollPane {
         HBox.setHgrow(recCard, Priority.ALWAYS);
         dualClinicalBox.getChildren().addAll(altCard, recCard);
 
-        // 5. Human-in-the-Loop Doctor Feedback Simulation (Page 13 in PDF)
+        // 5. Multi-Condition Cross-Analysis Section
+        VBox multiConditionSection = createMultiConditionSection();
+
+        // 6. Doctor Feedback & Clinical Override (Human-in-the-Loop)
         VBox feedbackCard = createDoctorFeedbackCard();
 
         contentBox.getChildren().addAll(
-                topBar, disclaimerBanner, heroCard,
-                multiConditionSection, xaiCard, dualClinicalBox,
+                topBar,
+                pdfStatusLabel,
+                heroCard,
+                engineTriad,
+                factorsCard,
+                dualClinicalBox,
+                multiConditionSection,
                 feedbackCard
         );
 
         setContent(contentBox);
+
+        // Entrance animation
+        UIAnimationHelper.slideInUp(contentBox);
     }
 
+    private HBox createTopBar() {
+        HBox bar = new HBox(16);
+        bar.setAlignment(Pos.CENTER_LEFT);
+
+        Button backBtn = new Button("← Back to Analysis Intake");
+        backBtn.getStyleClass().add("btn-secondary");
+        backBtn.setOnAction(e -> {
+            if (onBackAction != null) onBackAction.run();
+        });
+
+        VBox titleBox = new VBox(2);
+        Label title = new Label("Explainable Decision Support Card");
+        title.getStyleClass().add("page-header-title");
+        Label subtitle = new Label("Comprehensive transparent clinical reasoning for " + patient.getName() + " (#" + patient.getPatientId() + ")");
+        subtitle.getStyleClass().add("page-header-subtitle");
+        titleBox.getChildren().addAll(title, subtitle);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button pdfBtn = new Button("📄 Export PDF Clinical Report");
+        pdfBtn.setStyle("-fx-background-color: #0e7490; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 9 18; -fx-background-radius: 20; -fx-cursor: hand;");
+        pdfBtn.setOnAction(e -> exportPdfReport());
+
+        Button geminiBtn = new Button("✨ AI Clinical Summary");
+        geminiBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 9 18; -fx-background-radius: 20; -fx-cursor: hand;");
+        geminiBtn.setOnAction(e -> {
+            String context = "Analyze these patient results at a glance and provide a concise 2-3 sentence clinical summary: " +
+                    "Patient: " + patient.getName() + " (Age " + patient.getAge() + "). " +
+                    "Primary Condition: " + (result.getPrimaryCondition() != null ? result.getPrimaryCondition() : "N/A") + ". " +
+                    "Overall Risk: " + (result.getOverallRiskLevel() != null ? result.getOverallRiskLevel() : "N/A") + ". " +
+                    "Key Evidence: " + (result.getContributingFactors() != null ? String.join(", ", result.getContributingFactors()) : "None") + ".";
+            if (onAnalyzeWithGemini != null) {
+                onAnalyzeWithGemini.accept(context);
+            }
+        });
+
+        bar.getChildren().addAll(backBtn, titleBox, spacer, geminiBtn, pdfBtn);
+        return bar;
+    }
+
+    private void exportPdfReport() {
+        try {
+            File pdf = PdfReportGenerator.generateReport(patient, null, result, "reports");
+            pdfStatusLabel.setText("✅ PDF Clinical Report generated successfully: " + pdf.getAbsolutePath());
+            pdfStatusLabel.setStyle("-fx-background-color: #f0fdf4; -fx-text-fill: #166534; -fx-border-color: #86efac; -fx-padding: 10 16; -fx-background-radius: 8; -fx-font-weight: bold; -fx-font-size: 12px;");
+            pdfStatusLabel.setManaged(true);
+            pdfStatusLabel.setVisible(true);
+        } catch (Exception ex) {
+            pdfStatusLabel.setText("❌ PDF Generation failed: " + ex.getMessage());
+            pdfStatusLabel.setStyle("-fx-background-color: #fef2f2; -fx-text-fill: #991b1b; -fx-border-color: #fca5a5; -fx-padding: 10 16; -fx-background-radius: 8; -fx-font-weight: bold; -fx-font-size: 12px;");
+            pdfStatusLabel.setManaged(true);
+            pdfStatusLabel.setVisible(true);
+        }
+    }
+
+    /**
+     * Hero Card displaying Primary Condition & Overall Risk
+     */
     private VBox createPrimaryDiagnosisCard() {
         VBox card = new VBox(16);
-        String level = result.getOverallRiskLevel().toLowerCase();
+        String riskStr = result.getOverallRiskLevel() != null ? result.getOverallRiskLevel() : "Low";
+        String level = riskStr.toLowerCase();
         card.getStyleClass().addAll("card", "decision-card-" + level);
 
         HBox headerRow = new HBox(20);
         headerRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox condCol = new VBox(4);
-        Label flag = new Label("PRIMARY CLINICAL RISK CLASSIFICATION");
-        flag.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #64748b;");
+        VBox condCol = new VBox(6);
+        Label flag = new Label("PRIMARY CLINICAL DIAGNOSTIC DETERMINATION");
+        flag.setStyle("-fx-font-size: 11px; -fx-font-weight: 800; -fx-text-fill: #64748b; -fx-letter-spacing: 0.8px;");
 
-        Label primaryLabel = new Label(result.getPrimaryCondition());
-        primaryLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
+        Label primaryLabel = new Label(result.getPrimaryCondition() != null ? result.getPrimaryCondition() : "Not Available");
+        primaryLabel.setStyle("-fx-font-size: 28px; -fx-font-weight: 900; -fx-text-fill: #0f172a;");
 
-        Label patientSub = new Label("Patient: " + patient.getName() + " | Age: " + patient.getAge() + " | Gender: " + patient.getGender());
-        patientSub.setStyle("-fx-font-size: 12px; -fx-text-fill: #475569;");
+        Label patientSub = new Label("Patient: " + patient.getName() + " (#" + patient.getPatientId() + ") | Age: " + patient.getAge() + " | Gender: " + patient.getGender());
+        patientSub.setStyle("-fx-font-size: 13px; -fx-text-fill: #475569; -fx-font-weight: 500;");
+
         condCol.getChildren().addAll(flag, primaryLabel, patientSub);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        // Risk Level Badge
-        Label riskBadge = new Label(result.getOverallRiskLevel().toUpperCase() + " RISK");
-        riskBadge.getStyleClass().add("badge-" + level);
-        riskBadge.setStyle("-fx-font-size: 15px; -fx-padding: 8 18;");
+        // Overall Risk Badge
+        VBox riskCol = new VBox(6);
+        riskCol.setAlignment(Pos.CENTER_RIGHT);
 
-        // Confidence Indicator
-        VBox confBox = new VBox(2);
-        confBox.setAlignment(Pos.CENTER_RIGHT);
-        Label confLabel = new Label(String.format("%.1f%%", result.getConfidenceScore()));
-        confLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #0284c7;");
-        Label confSub = new Label("System Confidence");
-        confSub.setStyle("-fx-font-size: 11px; -fx-text-fill: #64748b;");
-        confBox.getChildren().addAll(confLabel, confSub);
+        Label overallRiskBadge = new Label(result.getOverallRiskLevel() != null ? result.getOverallRiskLevel().toUpperCase() + " RISK" : "Not Available");
+        overallRiskBadge.getStyleClass().add("badge-" + level);
+        overallRiskBadge.setStyle("-fx-font-size: 16px; -fx-padding: 8 22;");
 
-        headerRow.getChildren().addAll(condCol, spacer, riskBadge, confBox);
-        card.getChildren().add(headerRow);
+        Label confLabel = new Label("Confidence: " + (result.getConfidenceScore() > 0 ? String.format("%.1f%%", result.getConfidenceScore()) : "Not Available"));
+        confLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: 700; -fx-text-fill: #0284c7;");
+
+        riskCol.getChildren().addAll(overallRiskBadge, confLabel);
+
+        headerRow.getChildren().addAll(condCol, spacer, riskCol);
+
+        // Disclaimer
+        Label disclaimer = new Label("⚠ Clinical Support Notice: " + (result.getDisclaimer() != null ? result.getDisclaimer() : "Not Available"));
+        disclaimer.setStyle("-fx-font-size: 11px; -fx-text-fill: #64748b; -fx-font-style: italic; -fx-padding: 8 0 0 0;");
+        disclaimer.setWrapText(true);
+
+        card.getChildren().addAll(headerRow, disclaimer);
         return card;
     }
 
-    private VBox createMultiConditionSection() {
-        VBox section = new VBox(12);
+    /**
+     * Decision Engine Triad: ML Result | Rule Result | Hybrid Result
+     */
+    private HBox createEngineTriadRow() {
+        HBox row = new HBox(16);
 
-        Label secTitle = new Label("Multi-Condition Cross-Analysis");
-        secTitle.getStyleClass().add("card-header");
+        // 1. ML Result Card
+        VBox mlCard = new VBox(10);
+        mlCard.getStyleClass().add("card");
+        HBox.setHgrow(mlCard, Priority.ALWAYS);
 
-        HBox cardsRow = new HBox(16);
-        for (RiskAssessmentResult.ConditionEvaluation eval : result.getConditionEvaluations()) {
-            VBox conditionCard = new VBox(10);
-            conditionCard.getStyleClass().add("card");
-            conditionCard.setPrefWidth(330);
-            HBox.setHgrow(conditionCard, Priority.ALWAYS);
+        Label mlHeader = new Label("1. ML RESULT (Weka 3.8.6)");
+        mlHeader.getStyleClass().add("pillar-title");
 
-            HBox rowTop = new HBox();
-            rowTop.setAlignment(Pos.CENTER_LEFT);
+        String mlPred = (result.getMlPrediction() != null && !result.getMlPrediction().isEmpty() && !result.getMlPrediction().equalsIgnoreCase("Unavailable"))
+                ? result.getMlPrediction()
+                : "Not Available";
+        Label mlPredLbl = new Label(mlPred);
+        mlPredLbl.getStyleClass().add("pillar-value");
 
-            Label name = new Label(eval.getConditionName());
-            name.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #0f172a;");
+        String mlAlgo = result.getMlAlgorithm() != null && !result.getMlAlgorithm().isEmpty() ? result.getMlAlgorithm() : "Not Available";
+        String mlConf = result.getMlConfidence() > 0 ? String.format("%.1f%%", result.getMlConfidence()) : "Not Available";
 
-            Region sp = new Region();
-            HBox.setHgrow(sp, Priority.ALWAYS);
+        Label mlMeta = new Label("Model: " + mlAlgo + "\nProbability: " + mlConf + "\nWeight: 60% in decision fusion");
+        mlMeta.getStyleClass().add("pillar-sub");
+        mlCard.getChildren().addAll(mlHeader, mlPredLbl, mlMeta);
 
-            Label badge = new Label(eval.getRiskLevel().toUpperCase());
-            badge.getStyleClass().add("badge-" + eval.getRiskLevel().toLowerCase());
+        // 2. Rule Result Card
+        VBox ruleCard = new VBox(10);
+        ruleCard.getStyleClass().add("card");
+        HBox.setHgrow(ruleCard, Priority.ALWAYS);
 
-            rowTop.getChildren().addAll(name, sp, badge);
+        Label ruleHeader = new Label("2. RULE RESULT (Clinical Logic)");
+        ruleHeader.getStyleClass().add("pillar-title");
 
-            // Score Progress Bar
-            ProgressBar pBar = new ProgressBar(eval.getScore() / 100.0);
-            pBar.setMaxWidth(Double.MAX_VALUE);
-            if ("High".equalsIgnoreCase(eval.getRiskLevel())) {
-                pBar.setStyle("-fx-accent: #ef4444;");
-            } else if ("Medium".equalsIgnoreCase(eval.getRiskLevel())) {
-                pBar.setStyle("-fx-accent: #f59e0b;");
-            } else {
-                pBar.setStyle("-fx-accent: #10b981;");
-            }
+        String rulePred = result.getRuleRiskLevel() != null && !result.getRuleRiskLevel().isEmpty()
+                ? result.getRuleRiskLevel()
+                : "Not Available";
+        Label rulePredLbl = new Label(rulePred);
+        rulePredLbl.getStyleClass().add("pillar-value");
 
-            Label scoreText = new Label("Risk Score: " + eval.getScore() + " / 100");
-            scoreText.setStyle("-fx-font-size: 11px; -fx-font-weight: 600; -fx-text-fill: #64748b;");
+        String ruleScoreStr = result.getRuleScore() > 0 ? result.getRuleScore() + " / 100" : (result.getRuleRiskLevel() != null ? "Calculated" : "Not Available");
+        Label ruleMeta = new Label("Diagnostic Score: " + ruleScoreStr + "\nGuideline Rules: ADA / AHA / KDIGO\nWeight: 40% in decision fusion");
+        ruleMeta.getStyleClass().add("pillar-sub");
+        ruleCard.getChildren().addAll(ruleHeader, rulePredLbl, ruleMeta);
 
-            Label summary = new Label(eval.getSummary());
-            summary.setStyle("-fx-font-size: 11px; -fx-text-fill: #475569;");
-            summary.setWrapText(true);
+        // 3. Hybrid Result Card
+        VBox hybridCard = new VBox(10);
+        hybridCard.getStyleClass().add("card");
+        HBox.setHgrow(hybridCard, Priority.ALWAYS);
 
-            conditionCard.getChildren().addAll(rowTop, pBar, scoreText, summary);
-            cardsRow.getChildren().add(conditionCard);
-        }
+        Label hybridHeader = new Label("3. HYBRID RESULT (Decision Fusion)");
+        hybridHeader.getStyleClass().add("pillar-title");
 
-        section.getChildren().addAll(secTitle, cardsRow);
-        return section;
+        String hybridPred = result.getOverallRiskLevel() != null ? result.getOverallRiskLevel() : "Not Available";
+        Label hybridPredLbl = new Label(hybridPred);
+        hybridPredLbl.getStyleClass().add("pillar-value");
+
+        String fusionStr = result.getFusionStrategy() != null ? result.getFusionStrategy() : "Not Available";
+        String confStr = result.getConfidenceScore() > 0 ? String.format("%.1f%%", result.getConfidenceScore()) : "Not Available";
+
+        Label hybridMeta = new Label("Fusion: " + fusionStr + "\nCalibrated Confidence: " + confStr + "\nState: Validated Hybrid Output");
+        hybridMeta.getStyleClass().add("pillar-sub");
+        hybridCard.getChildren().addAll(hybridHeader, hybridPredLbl, hybridMeta);
+
+        row.getChildren().addAll(mlCard, ruleCard, hybridCard);
+        return row;
     }
 
-    private VBox createExplainabilityCard() {
+    /**
+     * Contributing Factors Checklist
+     */
+    private VBox createContributingFactorsCard() {
         VBox card = new VBox(14);
         card.getStyleClass().add("card");
 
-        Label header = new Label("Explainable Decision Card — Contributing Biomarkers & Clinical Rules");
+        Label header = new Label("Contributing Diagnostic Factors & Clinical Evidence");
         header.getStyleClass().add("card-header");
 
-        Label whyPrompt = new Label("Why did the system reach this conclusion?");
-        whyPrompt.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #0284c7;");
+        Label sub = new Label("Explicit biomarkers, vital thresholds, and clinical symptoms that contributed to this determination:");
+        sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b;");
 
-        VBox factorList = new VBox(10);
-        for (String factor : result.getContributingFactors()) {
-            HBox row = new HBox(12);
-            row.setAlignment(Pos.CENTER_LEFT);
-            row.setStyle("-fx-background-color: #f8fafc; -fx-padding: 8 12; -fx-background-radius: 6; -fx-border-color: #e2e8f0; -fx-border-radius: 6; -fx-border-width: 1;");
+        VBox factorsList = new VBox(8);
+        List<String> factors = result.getContributingFactors();
 
-            Label check = new Label("✔");
-            check.setStyle("-fx-text-fill: #0284c7; -fx-font-weight: bold; -fx-font-size: 14px;");
+        if (factors == null || factors.isEmpty()) {
+            Label emptyLbl = new Label("Not Available");
+            emptyLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-font-style: italic;");
+            factorsList.getChildren().add(emptyLbl);
+        } else {
+            for (String factor : factors) {
+                HBox row = new HBox(10);
+                row.setAlignment(Pos.CENTER_LEFT);
+                row.getStyleClass().add("factor-item");
 
-            Label factorText = new Label(factor);
-            factorText.setStyle("-fx-font-size: 13px; -fx-text-fill: #1e293b;");
-            factorText.setWrapText(true);
+                Label check = new Label("✔");
+                check.setStyle("-fx-text-fill: #0284c7; -fx-font-weight: bold; -fx-font-size: 13px;");
 
-            row.getChildren().addAll(check, factorText);
-            factorList.getChildren().add(row);
+                Label fText = new Label(factor);
+                fText.setStyle("-fx-font-size: 12px; -fx-text-fill: #1e293b; -fx-font-weight: 500;");
+                fText.setWrapText(true);
+
+                row.getChildren().addAll(check, fText);
+                factorsList.getChildren().add(row);
+            }
         }
 
-        card.getChildren().addAll(header, whyPrompt, factorList);
+        card.getChildren().addAll(header, sub, factorsList);
         return card;
     }
 
+    /**
+     * Alternative Possibilities (Differential Diagnoses)
+     */
     private VBox createAlternativesCard() {
         VBox card = new VBox(12);
         card.getStyleClass().add("card");
 
-        Label header = new Label("Alternative Possibilities Considered");
+        Label header = new Label("Alternative Possibilities (Differential Hypotheses)");
         header.getStyleClass().add("card-header");
 
+        Label sub = new Label("Secondary etiologies considered by clinical rule evaluation:");
+        sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b;");
+
         VBox list = new VBox(8);
-        for (String alt : result.getAlternativePossibilities()) {
-            HBox row = new HBox(10);
-            row.setAlignment(Pos.CENTER_LEFT);
-            Circle bullet = new Circle(3, Color.web("#64748b"));
-            Label altText = new Label(alt);
-            altText.setStyle("-fx-font-size: 12px; -fx-text-fill: #334155;");
-            altText.setWrapText(true);
-            row.getChildren().addAll(bullet, altText);
-            list.getChildren().add(row);
+        List<String> alts = result.getAlternativePossibilities();
+
+        if (alts == null || alts.isEmpty()) {
+            Label emptyLbl = new Label("Not Available");
+            emptyLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-font-style: italic;");
+            list.getChildren().add(emptyLbl);
+        } else {
+            for (String alt : alts) {
+                Label chip = new Label("• " + alt);
+                chip.getStyleClass().add("alternative-chip");
+                chip.setWrapText(true);
+                chip.setMaxWidth(Double.MAX_VALUE);
+                list.getChildren().add(chip);
+            }
         }
 
-        card.getChildren().addAll(header, list);
+        card.getChildren().addAll(header, sub, list);
         return card;
     }
 
+    /**
+     * Clinical Recommendations
+     */
     private VBox createRecommendationsCard() {
         VBox card = new VBox(12);
         card.getStyleClass().add("card");
 
-        Label header = new Label("Clinical Next Steps & Guidance");
+        Label header = new Label("Clinical Recommendations & Protocol Plan");
         header.getStyleClass().add("card-header");
 
+        Label sub = new Label("Guideline-directed clinical next steps and follow-up guidance:");
+        sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b;");
+
         VBox list = new VBox(8);
-        for (String rec : result.getRecommendations()) {
-            HBox row = new HBox(10);
-            row.setAlignment(Pos.CENTER_LEFT);
-            Circle bullet = new Circle(3, Color.web("#0284c7"));
-            Label recText = new Label(rec);
-            recText.setStyle("-fx-font-size: 12px; -fx-text-fill: #334155;");
-            recText.setWrapText(true);
-            row.getChildren().addAll(bullet, recText);
-            list.getChildren().add(row);
+        List<String> recs = result.getRecommendations();
+
+        if (recs == null || recs.isEmpty()) {
+            Label emptyLbl = new Label("Not Available");
+            emptyLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-font-style: italic;");
+            list.getChildren().add(emptyLbl);
+        } else {
+            int step = 1;
+            for (String rec : recs) {
+                HBox rBox = new HBox(10);
+                rBox.setAlignment(Pos.CENTER_LEFT);
+                rBox.getStyleClass().add("recommendation-box");
+
+                Label num = new Label(String.valueOf(step++));
+                num.setStyle("-fx-background-color: #059669; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 3 8; -fx-background-radius: 12;");
+
+                Label rText = new Label(rec);
+                rText.setStyle("-fx-font-size: 12px; -fx-text-fill: #166534; -fx-font-weight: 500;");
+                rText.setWrapText(true);
+
+                rBox.getChildren().addAll(num, rText);
+                list.getChildren().add(rBox);
+            }
         }
 
-        card.getChildren().addAll(header, list);
+        card.getChildren().addAll(header, sub, list);
         return card;
     }
 
+    /**
+     * Multi-Condition Cross-Analysis Section
+     */
+    private VBox createMultiConditionSection() {
+        VBox section = new VBox(14);
+        section.getStyleClass().add("card");
+
+        Label header = new Label("Multi-Condition Comparative Cross-Analysis");
+        header.getStyleClass().add("card-header");
+
+        Label sub = new Label("Simultaneous evaluation across all three monitored medical conditions:");
+        sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b;");
+
+        HBox cardsRow = new HBox(16);
+        List<RiskAssessmentResult.ConditionEvaluation> evaluations = result.getConditionEvaluations();
+
+        if (evaluations == null || evaluations.isEmpty()) {
+            Label empty = new Label("Not Available");
+            empty.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-font-style: italic;");
+            section.getChildren().addAll(header, sub, empty);
+            return section;
+        }
+
+        for (RiskAssessmentResult.ConditionEvaluation eval : evaluations) {
+            VBox cCard = new VBox(10);
+            cCard.setStyle("-fx-background-color: #f8fafc; -fx-padding: 16; -fx-background-radius: 12; -fx-border-color: #e2e8f0; -fx-border-radius: 12; -fx-border-width: 1;");
+            HBox.setHgrow(cCard, Priority.ALWAYS);
+
+            HBox rTop = new HBox();
+            rTop.setAlignment(Pos.CENTER_LEFT);
+            Label name = new Label(eval.getConditionName());
+            name.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #0f172a;");
+            Region sp = new Region();
+            HBox.setHgrow(sp, Priority.ALWAYS);
+            Label badge = new Label(eval.getRiskLevel().toUpperCase() + " RISK");
+            badge.getStyleClass().add("badge-" + eval.getRiskLevel().toLowerCase());
+            rTop.getChildren().addAll(name, sp, badge);
+
+            ProgressBar pBar = new ProgressBar(eval.getScore() / 100.0);
+            pBar.setMaxWidth(Double.MAX_VALUE);
+            String pColor = "#10b981";
+            if ("High".equalsIgnoreCase(eval.getRiskLevel())) pColor = "#ef4444";
+            else if ("Medium".equalsIgnoreCase(eval.getRiskLevel())) pColor = "#f59e0b";
+            pBar.setStyle("-fx-accent: " + pColor + ";");
+
+            Label scoreSummary = new Label(eval.getSummary() != null ? eval.getSummary() : "Score: " + eval.getScore());
+            scoreSummary.setStyle("-fx-font-size: 11px; -fx-text-fill: #64748b;");
+            scoreSummary.setWrapText(true);
+
+            cCard.getChildren().addAll(rTop, pBar, scoreSummary);
+            cardsRow.getChildren().add(cCard);
+        }
+
+        section.getChildren().addAll(header, sub, cardsRow);
+        return section;
+    }
+
+    /**
+     * Doctor Feedback & Clinical Override (Human-in-the-Loop AI)
+     */
     private VBox createDoctorFeedbackCard() {
         VBox card = new VBox(16);
         card.getStyleClass().add("card");
 
-        Label header = new Label("Doctor Feedback & Clinical Override Simulation (Human-in-the-Loop AI)");
+        Label header = new Label("Clinician Oversight & Doctor Feedback Simulation (Human-in-the-Loop)");
         header.getStyleClass().add("card-header");
 
-        Label sub = new Label("As an authorized clinician (" + currentUser.getFullName() + "), review the automated decision support above and record your decision.");
+        Label sub = new Label("Authorized Physician: " + currentUser.getFullName() + " — Review the automated decision support above and record your clinical decision in the audit log:");
         sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b;");
 
         // Radio Decision Group
-        HBox radioBox = new HBox(24);
+        HBox radioBox = new HBox(28);
         radioBox.setAlignment(Pos.CENTER_LEFT);
 
         ToggleGroup decisionGroup = new ToggleGroup();
 
         RadioButton acceptRadio = new RadioButton("Accept AI Recommendation");
         acceptRadio.setToggleGroup(decisionGroup);
-        acceptRadio.setStyle("-fx-font-weight: 600; -fx-text-fill: #059669;");
+        acceptRadio.setStyle("-fx-font-weight: 700; -fx-text-fill: #059669;");
         acceptRadio.setSelected(true);
 
         RadioButton modifyRadio = new RadioButton("Modify Risk Tier / Diagnosis");
         modifyRadio.setToggleGroup(decisionGroup);
-        modifyRadio.setStyle("-fx-font-weight: 600; -fx-text-fill: #d97706;");
+        modifyRadio.setStyle("-fx-font-weight: 700; -fx-text-fill: #d97706;");
 
         RadioButton rejectRadio = new RadioButton("Reject Recommendation");
         rejectRadio.setToggleGroup(decisionGroup);
-        rejectRadio.setStyle("-fx-font-weight: 600; -fx-text-fill: #dc2626;");
+        rejectRadio.setStyle("-fx-font-weight: 700; -fx-text-fill: #dc2626;");
 
         radioBox.getChildren().addAll(acceptRadio, modifyRadio, rejectRadio);
 
         // Notes Text Area
         VBox notesBox = new VBox(6);
-        Label notesLabel = new Label("Physician Clinical Notes / Override Rationale:");
+        Label notesLabel = new Label("Physician Clinical Notes & Rationale:");
         notesLabel.getStyleClass().add("form-label");
         TextArea commentsArea = new TextArea();
-        commentsArea.setPromptText("Enter clinical observations, diagnostic rationale, or therapeutic prescription plan...");
+        commentsArea.setPromptText("Enter clinical observations, diagnostic rationale, or medication orders...");
         commentsArea.setPrefRowCount(3);
         notesBox.getChildren().addAll(notesLabel, commentsArea);
 
-        // Submit Button & Confirmation Status
+        // Action Row
         HBox actionRow = new HBox(16);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
-        Button submitFeedbackBtn = new Button("Record Doctor Decision to SQL Database");
+        Button submitFeedbackBtn = new Button("Record Doctor Decision to Database");
         submitFeedbackBtn.getStyleClass().add("btn-success");
 
         Label statusLabel = new Label();

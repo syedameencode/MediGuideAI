@@ -1,0 +1,39 @@
+# Compiled class files & build artifacts
+target/
+*.class
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Virtual Machine / Temp files
+hs_err_pid*
+replay_pid*
+*.log
+
+# IDE files
+.idea/
+*.iml
+.run/
+*.iws
+.classpath
+.project
+.settings/
+.vscode/
+
+# Local databases & test databases
+test_mediguide.db
+*.db-journal
+target/*.db
+
+# Generated PDF reports
+reports/*.pdf
+
+# OS generated files
+.DS_Store
+Thumbs.db

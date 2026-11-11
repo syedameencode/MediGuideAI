@@ -44,6 +44,15 @@ public class RiskAssessmentResult {
     private String disclaimer = "Notice: This system is an educational and research clinical decision-support prototype. " +
             "It does not replace professional medical evaluation, laboratory confirmation, or doctor judgment.";
 
+    // Hybrid Fusion fields
+    private boolean mlAvailable;
+    private String mlPrediction = "N/A";
+    private double mlConfidence;
+    private String mlAlgorithm = "N/A";
+    private String ruleRiskLevel = "N/A";
+    private int ruleScore;
+    private String fusionMethod = "Rule-Based Only";
+
     public RiskAssessmentResult() {}
 
     public String getPrimaryCondition() {
@@ -109,4 +118,41 @@ public class RiskAssessmentResult {
     public void setDisclaimer(String disclaimer) {
         this.disclaimer = disclaimer;
     }
+
+    // ML / Hybrid Fusion Accessors
+    public boolean isMlAvailable() { return mlAvailable; }
+    public void setMlAvailable(boolean mlAvailable) { this.mlAvailable = mlAvailable; }
+
+    public String getMlPrediction() { return mlPrediction; }
+    public void setMlPrediction(String mlPrediction) { this.mlPrediction = mlPrediction; }
+
+    public double getMlConfidence() { return mlConfidence; }
+    public void setMlConfidence(double mlConfidence) { this.mlConfidence = mlConfidence; }
+
+    public String getMlAlgorithm() { return mlAlgorithm; }
+    public void setMlAlgorithm(String mlAlgorithm) { this.mlAlgorithm = mlAlgorithm; }
+
+    public String getRuleRiskLevel() { return ruleRiskLevel; }
+    public void setRuleRiskLevel(String ruleRiskLevel) { this.ruleRiskLevel = ruleRiskLevel; }
+
+    public int getRuleScore() { return ruleScore; }
+    public void setRuleScore(int ruleScore) { this.ruleScore = ruleScore; }
+
+    public String getFusionMethod() { return fusionMethod; }
+    public void setFusionMethod(String fusionMethod) { this.fusionMethod = fusionMethod; }
+
+    // Alias accessors for backward/PDF compatibility
+    public List<String> getTopRiskFactors() { return contributingFactors; }
+    public void setTopRiskFactors(List<String> list) { this.contributingFactors = list != null ? list : new ArrayList<>(); }
+
+    public List<String> getExplanations() { return contributingFactors; }
+
+    public void setContributingFactors(List<String> list) { this.contributingFactors = list != null ? list : new ArrayList<>(); }
+    public void setRecommendations(List<String> list) { this.recommendations = list != null ? list : new ArrayList<>(); }
+
+    public String getFusionStrategy() { return fusionMethod; }
+    public void setFusionStrategy(String fusionStrategy) { this.fusionMethod = fusionStrategy; }
+
+    public String getRulePrediction() { return ruleRiskLevel; }
+    public void setRulePrediction(String rulePrediction) { this.ruleRiskLevel = rulePrediction; }
 }

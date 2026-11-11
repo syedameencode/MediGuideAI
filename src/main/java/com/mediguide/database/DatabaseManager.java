@@ -46,7 +46,7 @@ public class DatabaseManager {
                 String port = props.getProperty("db.mysql.port", "3306");
                 String dbName = props.getProperty("db.mysql.database", "mediguide_ai");
                 String user = props.getProperty("db.mysql.username", "root");
-                String pass = props.getProperty("db.mysql.password", "");
+                String pass = props.getProperty("db.mysql.password", "NitinxPj");
 
                 // First ensure database exists
                 String serverUrl = "jdbc:mysql://" + host + ":" + port + "/?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC";
@@ -143,7 +143,7 @@ public class DatabaseManager {
                     "recorded_date VARCHAR(30) NOT NULL, " +
                     "FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE)");
 
-            // 4. Predictions table
+            // 4. Predictions table (with hybrid ML+Rule tracking)
             stmt.execute("CREATE TABLE IF NOT EXISTS predictions (" +
                     "prediction_id INTEGER PRIMARY KEY " + autoInc + ", " +
                     "patient_id INTEGER NOT NULL, " +
@@ -152,6 +152,11 @@ public class DatabaseManager {
                     "confidence DOUBLE NOT NULL, " +
                     "contributing_factors TEXT, " +
                     "alternative_conditions TEXT, " +
+                    "ml_prediction VARCHAR(20) DEFAULT '', " +
+                    "ml_confidence DOUBLE DEFAULT 0, " +
+                    "rule_prediction VARCHAR(20) DEFAULT '', " +
+                    "rule_score INTEGER DEFAULT 0, " +
+                    "fusion_method VARCHAR(100) DEFAULT 'Rule-Based Only', " +
                     "prediction_date VARCHAR(30) NOT NULL, " +
                     "FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE)");
 
@@ -166,9 +171,39 @@ public class DatabaseManager {
                     "feedback_date VARCHAR(30) NOT NULL, " +
                     "FOREIGN KEY (prediction_id) REFERENCES predictions(prediction_id) ON DELETE CASCADE)");
 
+            // 6. Model Evaluation Results table (stores actual ML metrics)
+            stmt.execute("CREATE TABLE IF NOT EXISTS model_results (" +
+                    "result_id INTEGER PRIMARY KEY " + autoInc + ", " +
+                    "algorithm VARCHAR(50) NOT NULL, " +
+                    "condition_name VARCHAR(100) NOT NULL, " +
+                    "accuracy DOUBLE NOT NULL, " +
+                    "precision_val DOUBLE NOT NULL, " +
+                    "recall_val DOUBLE NOT NULL, " +
+                    "f1_score DOUBLE NOT NULL, " +
+                    "training_date VARCHAR(30) NOT NULL)");
+
+            // Migration: add new columns to predictions if they don't exist
+            addColumnIfMissing(conn, "predictions", "ml_prediction", "VARCHAR(20) DEFAULT ''");
+            addColumnIfMissing(conn, "predictions", "ml_confidence", "DOUBLE DEFAULT 0");
+            addColumnIfMissing(conn, "predictions", "rule_prediction", "VARCHAR(20) DEFAULT ''");
+            addColumnIfMissing(conn, "predictions", "rule_score", "INTEGER DEFAULT 0");
+            addColumnIfMissing(conn, "predictions", "fusion_method", "VARCHAR(100) DEFAULT 'Rule-Based Only'");
+
             LOGGER.info("Database tables verified/created successfully.");
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Error creating database tables", e);
+        }
+    }
+
+    /**
+     * Safely add a column to an existing table if it doesn't already exist.
+     */
+    private void addColumnIfMissing(Connection conn, String table, String column, String type) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+            LOGGER.info("Added column " + column + " to table " + table);
+        } catch (SQLException e) {
+            // Column likely already exists — this is expected and safe to ignore
         }
     }
 
@@ -324,5 +359,9 @@ public class DatabaseManager {
             ps.setString(6, date);
             ps.executeUpdate();
         }
+    }
+
+    public boolean isMySqlAvailable() {
+        return "mysql".equalsIgnoreCase(databaseType);
     }
 }

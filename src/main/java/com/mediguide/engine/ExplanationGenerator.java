@@ -1,8 +1,6 @@
 package com.mediguide.engine;
 
 import com.mediguide.models.MedicalRecord;
-import com.mediguide.models.Patient;
-import com.mediguide.models.RiskAssessmentResult;
 
 import java.util.ArrayList;
 import java.util.List;

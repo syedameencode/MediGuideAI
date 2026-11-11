@@ -1,7 +1,6 @@
 package com.mediguide.ui;
 
 import com.mediguide.dao.UserDAO;
-import com.mediguide.database.DatabaseManager;
 import com.mediguide.models.User;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -67,16 +66,16 @@ public class LoginView extends BorderPane {
         rightContainer.setAlignment(Pos.CENTER);
         rightContainer.setPrefWidth(460);
         rightContainer.setPadding(new Insets(40));
-        rightContainer.setStyle("-fx-background-color: #f8fafc;");
+        rightContainer.setStyle("-fx-background-color: #f4f5f8;");
 
         VBox card = new VBox(18);
         card.getStyleClass().add("login-card");
         card.setMaxWidth(380);
 
         Label welcomeTitle = new Label("Sign In");
-        welcomeTitle.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
+        welcomeTitle.setStyle("-fx-font-size: 24px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
 
-        Label welcomeSub = new Label("Authenticate with Admin or Doctor role");
+        Label welcomeSub = new Label("Select user role to access Portal");
         welcomeSub.setStyle("-fx-font-size: 13px; -fx-text-fill: #64748b;");
 
         // Role Toggle (Admin vs Doctor)
@@ -215,7 +214,12 @@ public class LoginView extends BorderPane {
 
         errorLabel.setVisible(false);
         if (onLoginSuccess != null) {
-            onLoginSuccess.accept(user);
+            try {
+                onLoginSuccess.accept(user);
+            } catch (Throwable t) {
+                t.printStackTrace();
+                showError("System Error during login: " + t.getMessage());
+            }
         }
     }
 
